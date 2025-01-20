@@ -1,0 +1,15 @@
+name: dart_playground
+description: A simple command-line application.
+version: 1.0.0
+repository: https://github.com/hidenorly/dart_playground
+
+environment:
+  sdk: ^3.6.0
+
+# Add regular dependencies here.
+dependencies:
+  args: ^2.6.0
+  # path: ^1.8.0
+
+dev_dependencies:
+  lints: ^5.0.0
