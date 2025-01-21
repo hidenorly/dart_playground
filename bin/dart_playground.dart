@@ -1,38 +1,51 @@
+import 'dart:convert';
 import 'dart:io';
-import 'package:args/args.dart';
 
-// help
-void printUsage(ArgParser parser) {
-  print('Usage: dart cli_tool.dart [options]');
-  print(parser.usage);
-}
+import 'package:http/http.dart' as http;
 
-void main(List<String> arguments) {
-  final parser = ArgParser()
-    ..addOption('name', abbr: 'n', help: 'Your name')
-    ..addFlag('help', abbr: 'h', negatable: false, help: 'Show usage information');
+Future<String> getMapcode(double latitude, double longitude) async {
+  final data = {
+    "t": "jpndeg",
+    "jpn_lat": latitude.toString(),
+    "jpn_lon": longitude.toString(),
+  };
 
-  ArgResults argResults;
-  try {
-    argResults = parser.parse(arguments);
-  } on FormatException catch (e) {
-    print('Error: ${e.message}');
-    printUsage(parser);
-    exit(-1); // report error status
-  }
+  // POST request
+  final response = await http.post(
+    Uri.parse("https://saibara.sakura.ne.jp/map/convgeo.cgi"),
+    body: data,
+  );
 
-  // show help
-  if (argResults['help'] == true) {
-    printUsage(parser);
-    return;
-  }
+  if (response.statusCode == 200) {
+    // Extract map code from the response
+    final responseBody = response.body;
+    final mapcodeStartIndex = responseBody.indexOf('name="mapcode" value="') + 22;
+    final mapcodeEndIndex = responseBody.indexOf('"', mapcodeStartIndex);
 
-  // 名前が指定されている場合
-  final name = argResults['name'];
-  if (name != null) {
-    print('Hello, $name!');
+    if (mapcodeStartIndex > 22 && mapcodeEndIndex > mapcodeStartIndex) {
+      return responseBody.substring(mapcodeStartIndex, mapcodeEndIndex);
+    } else {
+      throw Exception("Failed to extract mapcode from response.");
+    }
   } else {
-    print('Hello, world!');
+    throw Exception("Failed to fetch mapcode: ${response.statusCode}");
   }
 }
 
+void main(List<String> arguments) async {
+  if (arguments.length != 2) {
+    print("Usage: dart get_mapcode.dart <latitude> <longitude>");
+    exit(1);
+  }
+
+  try {
+    final latitude = double.parse(arguments[0]);
+    final longitude = double.parse(arguments[1]);
+
+    final mapcode = await getMapcode(latitude, longitude);
+    print("Mapcode: $mapcode");
+  } catch (e) {
+    print("Error: $e");
+    exit(1);
+  }
+}
