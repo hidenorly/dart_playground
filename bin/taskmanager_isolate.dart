@@ -17,22 +17,116 @@
 import 'dart:isolate';
 import 'dart:async';
 
-abstract class Task {
+class Task {
   final int id;
   bool isRunning = false;
   bool stopRunning = false;
+  SendPort? sendPort = null;
+  int? originalHashCode = null;
 
   Task(this.id);
 
-  void onExecute();
+  void onExecute(){}
 
-  void execute(SendPort sendPort) async {
+  void execute() async {
     isRunning = true;
     onExecute();
-    sendPort.send(id);
+    sendPort?.send(this);
     isRunning = false;
   }
 }
+
+class TaskManager {
+  final int maxThreads;
+  final List<Task> tasks = [];
+  final Map<int, Isolate> activeTasks = {};
+  bool stopping = false;
+  final ReceivePort receivePort = ReceivePort();
+  Completer<void> _completion = Completer<void>();
+  bool disposed = false;
+
+  TaskManager(this.maxThreads) {
+    receivePort.listen((task) {
+      _onTaskCompletion(task);
+    });
+  }
+
+  void addTask(Task task) {
+    if(disposed){
+      throw Exception("TaskManager is disposed and cannot accept new tasks.");
+    }
+    tasks.add(task);
+    if (_completion.isCompleted) {
+      _completion.completeError('Completion was already completed, resetting.');
+      _completion = Completer<void>();
+    }
+  }
+
+  void cancelTask(Task task) {
+    if (activeTasks.containsKey(task.originalHashCode)) {
+      task.stopRunning = true;
+      activeTasks[task.originalHashCode]?.kill(priority: Isolate.immediate);
+      activeTasks.remove(task.originalHashCode);
+    }
+    tasks.remove(task);
+  }
+
+  void executeAllTasks() async {
+    if(disposed){
+      throw Exception("TaskManager is disposed and cannot accept new tasks.");
+    }
+    stopping = false;
+    while (activeTasks.length < maxThreads && tasks.isNotEmpty) {
+      var task = tasks.removeAt(0);
+      int originalHashCode = task.originalHashCode = task.hashCode;
+      task.sendPort = receivePort.sendPort;
+      var isolate = await Isolate.spawn(TaskManager._runTask, [task]);
+      activeTasks[originalHashCode] = isolate;
+    }
+  }
+
+  void stopAllTasks() {
+    stopping = true;
+    for (var task in tasks) {
+      task.stopRunning = true;
+    }
+    for (var isolate in activeTasks.values) {
+      isolate.kill(priority: Isolate.immediate);
+    }
+    activeTasks.clear();
+    print('All tasks stopped.');
+    if (!_completion.isCompleted) {
+      _completion.complete();
+    }
+  }
+
+  Future<void> finalize() async {
+    if(disposed) return;
+
+    await _completion.future;
+    disposed = true;
+    receivePort.close();
+    print('TaskManager finalized.');
+  }
+
+  void _onTaskCompletion(Task task) {
+    print('Task ${task.id} completed.');
+    activeTasks.remove(task.originalHashCode);
+    if (tasks.isEmpty && activeTasks.isEmpty) {
+      if (!_completion.isCompleted) {
+        _completion.complete();
+      }
+    } else if (!stopping) {
+      executeAllTasks();
+    }
+  }
+
+  static void _runTask(List<dynamic> args) {
+    Task task = args[0];
+    task.execute();
+  }
+}
+
 
 class CExampleTask extends Task {
   CExampleTask(int id) : super(id);
@@ -47,84 +141,6 @@ class CExampleTask extends Task {
   }
 }
 
-class TaskManager {
-  final int maxThreads;
-  final List<Task> tasks = [];
-  final Map<int, Isolate> activeTasks = {};
-  bool stopping = false;
-  final ReceivePort receivePort = ReceivePort();
-  bool disposed = false;
-
-  TaskManager(this.maxThreads) {
-    receivePort.listen((taskId) {
-      _onTaskCompletion(taskId);
-    });
-  }
-
-  void addTask(Task task) {
-    if(disposed){
-      throw Exception("TaskManager is disposed and cannot accept new tasks.");
-    }
-    tasks.add(task);
-  }
-
-  void cancelTask(int taskId) {
-    if (activeTasks.containsKey(taskId)) {
-      tasks.firstWhere((task) => task.id == taskId).stopRunning = true;
-      activeTasks[taskId]?.kill(priority: Isolate.immediate);
-      activeTasks.remove(taskId);
-      print('Task $taskId canceled.');
-    }
-    tasks.removeWhere((task) => task.id == taskId);
-  }
-
-  void executeAllTasks() async {
-    if(disposed){
-      throw Exception("TaskManager is disposed and cannot accept new tasks.");
-    }
-    stopping = false;
-    while (activeTasks.length < maxThreads && tasks.isNotEmpty) {
-      var task = tasks.removeAt(0);
-      var isolate = await Isolate.spawn(_runTask, [task.id, receivePort.sendPort]);
-      activeTasks[task.id] = isolate;
-    }
-  }
-
-  void stopAllTasks() {
-    stopping = true;
-    for (var task in tasks) {
-      task.stopRunning = true;
-    }
-    for (var isolate in activeTasks.values) {
-      isolate.kill(priority: Isolate.immediate);
-    }
-    activeTasks.clear();
-    print('All tasks stopped.');
-  }
-
-  void dispose() {
-    if(disposed) return;
-
-    disposed = true;
-    stopAllTasks();
-    receivePort.close();
-    print('TaskManager disposed.');
-  }
-
-  void _onTaskCompletion(int taskId) {
-    print('Task $taskId completed.');
-    activeTasks.remove(taskId);
-    if (!stopping) {
-      executeAllTasks();
-    }
-  }
-}
-
-void _runTask(List<dynamic> args) {
-  int taskId = args[0];
-  SendPort sendPort = args[1];
-  CExampleTask(taskId).execute(sendPort);
-}
 
 void main() async {
   TaskManager taskManager = TaskManager(2);
@@ -134,7 +150,6 @@ void main() async {
   taskManager.addTask(CExampleTask(4));
   
   taskManager.executeAllTasks();
-  await Future.delayed(Duration(seconds: 1));
-  taskManager.stopAllTasks();
-  taskManager.dispose();
+  //taskManager.stopAllTasks();
+  await taskManager.finalize();
 }
