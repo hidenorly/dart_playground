@@ -18,13 +18,13 @@ import 'dart:isolate';
 import 'dart:async';
 
 class Task {
-  final int id;
+  final String desc;
   bool isRunning = false;
   bool stopRunning = false;
   SendPort? sendPort = null;
   int? originalHashCode = null;
 
-  Task(this.id);
+  Task(this.desc);
 
   void onExecute(){}
 
@@ -33,6 +33,10 @@ class Task {
     onExecute();
     sendPort?.send(this);
     isRunning = false;
+  }
+
+  dynamic getResult(){
+    return null;
   }
 }
 
@@ -44,6 +48,7 @@ class TaskManager {
   final ReceivePort receivePort = ReceivePort();
   Completer<void> _completion = Completer<void>();
   bool disposed = false;
+  List<dynamic> result = [];
 
   TaskManager(this.maxThreads) {
     receivePort.listen((task) {
@@ -110,7 +115,9 @@ class TaskManager {
   }
 
   void _onTaskCompletion(Task task) {
-    print('Task ${task.id} completed.');
+    print('Task ${task.desc} completed.');
+    var theResult = task.getResult();
+    result.add(theResult);
     activeTasks.remove(task.originalHashCode);
     if (tasks.isEmpty && activeTasks.isEmpty) {
       if (!_completion.isCompleted) {
@@ -125,31 +132,47 @@ class TaskManager {
     Task task = args[0];
     task.execute();
   }
+
+  List<dynamic> getResult(){
+    return result;
+  }
 }
 
 
 class CExampleTask extends Task {
-  CExampleTask(int id) : super(id);
+  int result = 0;
+  CExampleTask(String desc) : super(desc);
 
   @override
   void onExecute() async {
-    print('Task $id is running...');
+    print('Task $desc is running...');
     for (int i = 0; i < 1000; i++) {
+      result = i;
       if (stopRunning) break;
       await Future.delayed(Duration(milliseconds: 1));
     }
+  }
+
+  @override
+  dynamic getResult(){
+    //print("CExampleTask::getResult:${result}");
+    return result;
   }
 }
 
 
 void main() async {
   TaskManager taskManager = TaskManager(2);
-  taskManager.addTask(CExampleTask(1));
-  taskManager.addTask(CExampleTask(2));
-  taskManager.addTask(CExampleTask(3));
-  taskManager.addTask(CExampleTask(4));
+  taskManager.addTask(CExampleTask("1"));
+  taskManager.addTask(CExampleTask("2"));
+  taskManager.addTask(CExampleTask("3"));
+  taskManager.addTask(CExampleTask("4"));
   
   taskManager.executeAllTasks();
   //taskManager.stopAllTasks();
   await taskManager.finalize();
+  var result = taskManager.getResult();
+  for(var aResult in result){
+    print(aResult.toString());
+  }
 }
