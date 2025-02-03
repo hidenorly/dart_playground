@@ -43,7 +43,7 @@ class Task {
 class TaskManager {
   final int maxThreads;
   final List<Task> tasks = [];
-  final Map<int, Isolate> activeTasks = {};
+  final Map<int, Isolate?> activeTasks = {};
   bool stopping = false;
   final ReceivePort receivePort = ReceivePort();
   Completer<void> _completion = Completer<void>();
@@ -85,6 +85,7 @@ class TaskManager {
       var task = tasks.removeAt(0);
       int originalHashCode = task.originalHashCode = task.hashCode;
       task.sendPort = receivePort.sendPort;
+      activeTasks[originalHashCode] = null;
       var isolate = await Isolate.spawn(TaskManager._runTask, [task]);
       activeTasks[originalHashCode] = isolate;
     }
@@ -96,7 +97,7 @@ class TaskManager {
       task.stopRunning = true;
     }
     for (var isolate in activeTasks.values) {
-      isolate.kill(priority: Isolate.immediate);
+      isolate?.kill(priority: Isolate.immediate);
     }
     activeTasks.clear();
     print('All tasks stopped.');
