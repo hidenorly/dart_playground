@@ -17,26 +17,31 @@
 import 'dart:isolate';
 import 'dart:async';
 
+class TaskCompletionResult
+{
+  final int? id;
+  final String desc;
+  final dynamic result;
+  TaskCompletionResult(this.id, this.desc, this.result);
+}
+
 class Task {
   final String desc;
   bool isRunning = false;
   bool stopRunning = false;
   SendPort? sendPort = null;
-  int? originalHashCode = null;
+  int? id = null;
 
   Task(this.desc);
 
-  void onExecute(){}
+  dynamic onExecute() async{ return null; }
 
   void execute() async {
     isRunning = true;
-    onExecute();
-    sendPort?.send(this);
+    var result = await onExecute();
+    final pack = TaskCompletionResult(this.id, this.desc, result);
+    sendPort?.send( pack );
     isRunning = false;
-  }
-
-  dynamic getResult(){
-    return null;
   }
 }
 
@@ -68,10 +73,10 @@ class TaskManager {
   }
 
   void cancelTask(Task task) {
-    if (activeTasks.containsKey(task.originalHashCode)) {
+    if (activeTasks.containsKey(task.id)) {
       task.stopRunning = true;
-      activeTasks[task.originalHashCode]?.kill(priority: Isolate.immediate);
-      activeTasks.remove(task.originalHashCode);
+      activeTasks[task.id]?.kill(priority: Isolate.immediate);
+      activeTasks.remove(task.id);
     }
     tasks.remove(task);
   }
@@ -83,11 +88,11 @@ class TaskManager {
     stopping = false;
     while (activeTasks.length < maxThreads && tasks.isNotEmpty) {
       var task = tasks.removeAt(0);
-      int originalHashCode = task.originalHashCode = task.hashCode;
+      int id = task.id = task.hashCode;
       task.sendPort = receivePort.sendPort;
-      activeTasks[originalHashCode] = null;
+      activeTasks[id] = null;
       var isolate = await Isolate.spawn(TaskManager._runTask, [task]);
-      activeTasks[originalHashCode] = isolate;
+      activeTasks[id] = isolate;
     }
   }
 
@@ -115,11 +120,10 @@ class TaskManager {
     print('TaskManager finalized.');
   }
 
-  void _onTaskCompletion(Task task) {
-    print('Task ${task.desc} completed.');
-    var theResult = task.getResult();
-    result.add(theResult);
-    activeTasks.remove(task.originalHashCode);
+  void _onTaskCompletion(TaskCompletionResult _result) {
+    print('Task ${_result.desc} completed.');
+    result.add(_result.result);
+    activeTasks.remove(_result.id);
     if (tasks.isEmpty && activeTasks.isEmpty) {
       if (!_completion.isCompleted) {
         _completion.complete();
@@ -145,18 +149,13 @@ class CExampleTask extends Task {
   CExampleTask(String desc) : super(desc);
 
   @override
-  void onExecute() async {
+  dynamic onExecute() async {
     print('Task $desc is running...');
     for (int i = 0; i < 1000; i++) {
       result = i;
       if (stopRunning) break;
       await Future.delayed(Duration(milliseconds: 1));
     }
-  }
-
-  @override
-  dynamic getResult(){
-    //print("CExampleTask::getResult:${result}");
     return result;
   }
 }
@@ -166,7 +165,7 @@ void main() async {
   TaskManager taskManager = TaskManager(2);
   taskManager.addTask(CExampleTask("1"));
   taskManager.addTask(CExampleTask("2"));
-  taskManager.addTask(CExampleTask("3"));
+  taskManager.addTask(Task("3"));
   taskManager.addTask(CExampleTask("4"));
   
   taskManager.executeAllTasks();
