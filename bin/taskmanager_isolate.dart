@@ -19,27 +19,29 @@ import 'dart:async';
 
 class TaskCompletionResult
 {
-  final int? id;
+  final int id;
+  final int? _hash;
   final String desc;
   final dynamic result;
-  TaskCompletionResult(this.id, this.desc, this.result);
+  TaskCompletionResult(this.id, this._hash, this.desc, this.result);
 }
 
 class Task {
+  final int id;
   final String desc;
   bool isRunning = false;
   bool stopRunning = false;
   SendPort? sendPort = null;
-  int? id = null;
+  int? _hash = null;
 
-  Task(this.desc);
+  Task(this.id, [this.desc = ""]);
 
   dynamic onExecute() async{ return null; }
 
   void execute() async {
     isRunning = true;
     var result = await onExecute();
-    final pack = TaskCompletionResult(this.id, this.desc, result);
+    final pack = TaskCompletionResult(this.id, this._hash, this.desc, result);
     sendPort?.send( pack );
     isRunning = false;
   }
@@ -88,11 +90,11 @@ class TaskManager {
     stopping = false;
     while (activeTasks.length < maxThreads && tasks.isNotEmpty) {
       var task = tasks.removeAt(0);
-      int id = task.id = task.hashCode;
+      int _hash = task._hash = task.hashCode;
       task.sendPort = receivePort.sendPort;
-      activeTasks[id] = null;
+      activeTasks[_hash] = null;
       var isolate = await Isolate.spawn(TaskManager._runTask, [task]);
-      activeTasks[id] = isolate;
+      activeTasks[_hash] = isolate;
     }
   }
 
@@ -123,7 +125,7 @@ class TaskManager {
   void _onTaskCompletion(TaskCompletionResult _result) {
     print('Task ${_result.desc} completed.');
     result.add(_result.result);
-    activeTasks.remove(_result.id);
+    activeTasks.remove(_result._hash);
     if (tasks.isEmpty && activeTasks.isEmpty) {
       if (!_completion.isCompleted) {
         _completion.complete();
@@ -146,7 +148,7 @@ class TaskManager {
 
 class CExampleTask extends Task {
   int result = 0;
-  CExampleTask(String desc) : super(desc);
+  CExampleTask(int id, [String desc = ""]) : super(id, desc);
 
   @override
   dynamic onExecute() async {
@@ -163,10 +165,10 @@ class CExampleTask extends Task {
 
 void main() async {
   TaskManager taskManager = TaskManager(2);
-  taskManager.addTask(CExampleTask("1"));
-  taskManager.addTask(CExampleTask("2"));
-  taskManager.addTask(Task("3"));
-  taskManager.addTask(CExampleTask("4"));
+  taskManager.addTask(CExampleTask(1, "1"));
+  taskManager.addTask(CExampleTask(2, "2"));
+  taskManager.addTask(Task(3, "3"));
+  taskManager.addTask(CExampleTask(4, "4"));
   
   taskManager.executeAllTasks();
   //taskManager.stopAllTasks();
