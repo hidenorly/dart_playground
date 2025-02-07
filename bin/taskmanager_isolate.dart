@@ -55,7 +55,7 @@ class TaskManager {
   final ReceivePort receivePort = ReceivePort();
   Completer<void> _completion = Completer<void>();
   bool disposed = false;
-  List<dynamic> result = [];
+  List<TaskCompletionResult> result = [];
 
   TaskManager(this.maxThreads) {
     receivePort.listen((task) {
@@ -124,7 +124,7 @@ class TaskManager {
 
   void _onTaskCompletion(TaskCompletionResult _result) {
     print('Task ${_result.desc} completed.');
-    result.add(_result.result);
+    result.add(_result);
     activeTasks.remove(_result._hash);
     if (tasks.isEmpty && activeTasks.isEmpty) {
       if (!_completion.isCompleted) {
@@ -175,6 +175,6 @@ void main() async {
   await taskManager.finalize();
   var result = taskManager.getResult();
   for(var aResult in result){
-    print(aResult.toString());
+    print('id=${aResult.id} desc=${aResult.desc} result=${aResult.result.toString()}');
   }
 }
