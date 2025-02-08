@@ -123,7 +123,7 @@ class TaskManager {
   }
 
   void _onTaskCompletion(TaskCompletionResult _result) {
-    print('Task ${_result.desc} completed.');
+    print('Task ${_result.desc.isNotEmpty ? _result.desc : _result.id} completed.');
     result.add(_result);
     activeTasks.remove(_result._hash);
     if (tasks.isEmpty && activeTasks.isEmpty) {
@@ -167,7 +167,7 @@ void main() async {
   TaskManager taskManager = TaskManager(2);
   taskManager.addTask(CExampleTask(1, "1"));
   taskManager.addTask(CExampleTask(2, "2"));
-  taskManager.addTask(Task(3, "3"));
+  taskManager.addTask(Task(3));
   taskManager.addTask(CExampleTask(4, "4"));
   
   taskManager.executeAllTasks();
