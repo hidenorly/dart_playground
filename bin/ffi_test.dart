@@ -31,28 +31,38 @@ final StartThreadDart startNativeThread = nativeLib
     .lookup<NativeFunction<StartThreadC>>("start_thread")
     .asFunction();
 
+
+final Map<int, ReceivePort> port_mapper = {};
+
 // define callback
 void nativeCallback(int port, int value) {
-  //final SendPort sendPort = SendPort.fromRawNativePort(port);
-  //sendPort.send(value);
-  print("value=${value}");
+    print("nativeCallback::port=${port}, value=${value}");
+    ReceivePort? recv_port = port_mapper?[port];
+    print("sendPort=${recv_port.toString()}");
+    recv_port?.sendPort.send(value);
 }
 // -- Convert the nativeCallback to callbackPointer(=Pointer<NativeFunction<>>)
-final Pointer<NativeFunction<Void Function(Int64, Int32)>> callbackPointer =
-    Pointer.fromFunction<Void Function(Int64, Int32)>(nativeCallback);
+//final Pointer<NativeFunction<Void Function(Int64, Int32)>> callbackPointer = Pointer.fromFunction<Void Function(Int64, Int32)>(nativeCallback);
+typedef NativeCallbackFunc = Void Function(Int64, Int32);
+typedef NativeCallback = void Function(int, int);
+final callbackPointer = NativeCallable<NativeCallbackFunc>.isolateLocal(nativeCallback).nativeFunction;
 
-//typedef NativeCallbackFunc = Void Function(Int64, Int32);
-//typedef NativeCallback = void Function(int, int);
-//final callbackPointer = NativeCallable<NativeCallbackFunc>.isolateLocal(nativeCallback).nativeFunction;
-
-final ReceivePort receivePort = ReceivePort();
+final initializeApi = nativeLib.lookupFunction<IntPtr Function(Pointer<Void>), 
+     int Function(Pointer<Void>)>("InitDartApiDL"); 
 
 void main() async {
-   receivePort.listen((message) {
-    print("Dart: received message: $message");
-  });
+    initializeApi(NativeApi.initializeApiDLData);
 
-  startNativeThread(receivePort.sendPort.nativePort, callbackPointer);
+    final ReceivePort receivePort = ReceivePort();
 
-  exit(0);
+    receivePort.listen((message) {
+        print("Dart: received message: $message");
+        exit(0);
+    });
+
+    port_mapper[receivePort.sendPort.nativePort] = receivePort;
+    print("native_port=${receivePort.sendPort.nativePort}");
+    startNativeThread(receivePort.sendPort.nativePort, callbackPointer);
+
+    //exit(0);
 }
