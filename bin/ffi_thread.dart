@@ -15,37 +15,32 @@
 */
 
 import 'dart:ffi';
+import 'package:ffi/ffi.dart';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 // load ffitest shared library
 final DynamicLibrary nativeLib = DynamicLibrary.open(
-    Platform.isMacOS ? "libffitest.dylib" :
-    Platform.isLinux ? "libffitest.so" :
-    "ffitest.dll");
+    Platform.isMacOS ? "libffithread.dylib" :
+    Platform.isLinux ? "libffithread.so" :
+    "ffithread.dll");
+
+final class NativeArgument extends Struct {
+  @Int32()
+  external int data;
+
+  external Pointer<Uint8> buf;
+}
 
 // resolve symbols -- start_thread
-typedef StartThreadC = Void Function(Int64, Pointer<NativeFunction<Void Function(Int64, Int32)>>);
-typedef StartThreadDart = void Function(int, Pointer<NativeFunction<Void Function(Int64, Int32)>>);
+typedef StartThreadC = Void Function(Int64, Pointer<NativeArgument>);
+typedef StartThreadDart = void Function(int, Pointer<NativeArgument>);
 final StartThreadDart startNativeThread = nativeLib
     .lookup<NativeFunction<StartThreadC>>("start_thread")
     .asFunction();
 
-
 final Map<int, ReceivePort> port_mapper = {};
-
-// define callback
-void nativeCallback(int port, int value) {
-    print("nativeCallback::port=${port}, value=${value}");
-    ReceivePort? recv_port = port_mapper?[port];
-    print("sendPort=${recv_port.toString()}");
-    recv_port?.sendPort.send(value);
-}
-// -- Convert the nativeCallback to callbackPointer(=Pointer<NativeFunction<>>)
-//final Pointer<NativeFunction<Void Function(Int64, Int32)>> callbackPointer = Pointer.fromFunction<Void Function(Int64, Int32)>(nativeCallback);
-typedef NativeCallbackFunc = Void Function(Int64, Int32);
-typedef NativeCallback = void Function(int, int);
-final callbackPointer = NativeCallable<NativeCallbackFunc>.isolateLocal(nativeCallback).nativeFunction;
 
 final initializeApi = nativeLib.lookupFunction<IntPtr Function(Pointer<Void>), 
      int Function(Pointer<Void>)>("InitDartApiDL"); 
@@ -53,16 +48,32 @@ final initializeApi = nativeLib.lookupFunction<IntPtr Function(Pointer<Void>),
 void main() async {
     initializeApi(NativeApi.initializeApiDLData);
 
+    // receiver
     final ReceivePort receivePort = ReceivePort();
-
     receivePort.listen((message) {
         print("Dart: received message: $message");
         exit(0);
     });
+    // sender port
+    final nativeSendPort = receivePort.sendPort.nativePort;
+    print("native_port=${nativeSendPort}");
+    // store for future use
+    port_mapper[nativeSendPort] = receivePort;
 
-    port_mapper[receivePort.sendPort.nativePort] = receivePort;
-    print("native_port=${receivePort.sendPort.nativePort}");
-    startNativeThread(receivePort.sendPort.nativePort, callbackPointer);
+    // argument
+    final Pointer<NativeArgument> arg = malloc<NativeArgument>();
 
-    //exit(0);
+    arg.ref.data = 10;
+
+    final String message = "Hello from Dart";
+    arg.ref.buf = malloc<Uint8>(message.length+1);
+    final Uint8List buf = arg.ref.buf.asTypedList(message.length+1);
+    buf.setRange(0, message.length, message.codeUnits);
+    buf[message.length] = 0;
+
+    // invoke native start_thread
+    startNativeThread(receivePort.sendPort.nativePort, arg);
+
+    // free the argument
+    malloc.free(arg);
 }
