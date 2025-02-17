@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+message EmptyMessage {}
+
+service MyService {
+  rpc method1 (MyRequest) returns (MyResponse);
+  rpc shutdown (EmptyMessage) returns (EmptyMessage);
+}
+
+message MyRequest {
+  string text = 1;
+}
+
+message MyResponse {
+  string received_text = 1;
+}
