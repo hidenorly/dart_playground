@@ -20,7 +20,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
-// load ffitest shared library
+// load libffithread shared library
 final DynamicLibrary nativeLib = DynamicLibrary.open(
     Platform.isMacOS ? "libffithread.dylib" :
     Platform.isLinux ? "libffithread.so" :
