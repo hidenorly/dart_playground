@@ -15,16 +15,82 @@ clang++ -shared -o libffitest.dylib -fPIC -std=c++20 \
     -I/Users/harold/flutter/flutter/bin/cache/dart-sdk/include \
     dart_api_dl.o native/ffi_test.cpp
 
-dart bin/ffi_test.dart                                
-native_port=8236701556897007
-Initializing...
-Initialized:ok
-FFIThreadTest::execute
-Dart_CObject
-Dart_PostCObject_DL
-FFIThreadTest::execute::bail
-Dart: received message: 2530
+dart bin/ffi_test.dart
+native_port=1273504792250731
+nativeCallback::port=1273504792250731, value=2521
+Dart: received message: 2521
 ```
+
+## FFIThread
+
+```
+dart pub add ffi
+```
+
+```
+clang -c -o dart_api_dl.o -fPIC -I/Users/harold/flutter/flutter/bin/cache/dart-sdk/include /Users/harold/flutter/flutter/bin/cache/dart-sdk/include/dart_api_dl.c
+
+clang++ -shared -o libffithread.dylib -fPIC -std=c++20 \
+    -I/Users/harold/flutter/flutter/bin/cache/dart-sdk/include \
+    dart_api_dl.o native/ffi_thread.cpp
+
+dart bin/ffi_thread.dart
+```
+
+## FFISharedBuf
+
+```
+clang -c -o dart_api_dl.o -fPIC -I/Users/harold/flutter/flutter/bin/cache/dart-sdk/include /Users/harold/flutter/flutter/bin/cache/dart-sdk/include/dart_api_dl.c
+
+clang++ -shared -o libffisharedbuf.dylib -fPIC -std=c++20 \
+    -I/Users/harold/flutter/flutter/bin/cache/dart-sdk/include \
+    dart_api_dl.o native/ffi_sharedbuf.cpp
+
+dart bin/ffi_sharedbuf.dart
+main1::available free slot is 0
+shm_create::process id:10017 thread id:0x170657000
+main1::shared_buffer_ptr=Pointer: address=0x102728000
+main1::read data = Hello from Dart
+isolated main2
+main2::shmId=0
+shm_create::process id:10017 thread id:0x170657000
+main2::shared buffer is created
+main2::shared_buffer_ptr=Pointer: address=0x102728000
+main2::read data = Hello from Dart
+
+ipcs -m
+```
+
+## JsonRpc with WebSocket
+
+```
+dart bin/json_rpc_server.dart
+WebSocket JSON-RPC Server listening on ws://localhost:8080
+Received: {jsonrpc: 2.0, method: sum, params: [10, 20], id: 1}
+Received: {jsonrpc: 2.0, method: sum, params: [5, 15], id: 2}
+Received: {jsonrpc: 2.0, method: shutdown, params: [], id: 3}
+```
+
+```
+dart bin/json_rpc_client.dart
+Connected to WebSocket Server
+Received Response: {jsonrpc: 2.0, id: 1, result: 30}
+Received Response: {jsonrpc: 2.0, id: 2, result: 20}
+Received Response: {jsonrpc: 2.0, id: 3, result: shutdown ok}
+```
+
+## gRPC
+
+```
+dart pub add grpc
+```
+
+```
+dart pub global activate protoc_plugin
+protoc --dart_out=grpc:lib -Iprotos protos/grpc_idl.proto
+```
+
+
 
 
 ### Supplemental info.
