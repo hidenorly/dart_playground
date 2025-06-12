@@ -90,7 +90,21 @@ dart pub global activate protoc_plugin
 protoc --dart_out=grpc:lib -Iprotos protos/grpc_idl.proto
 ```
 
+## tinyhttp server
 
+```
+dart run bin/tiny_httpserver.dart
+```
+
+```
+curl "http://localhost:8080/settings/hoge?key=value"
+Settings handler:/settings/hoge?key=value
+key = value
+
+curl "http://localhost:8080/switch/hoge?key1=value1"
+Switch handler:/switch/hoge?key1=value1
+key1 = value1
+```
 
 
 ### Supplemental info.
